@@ -1,5 +1,5 @@
-[Back to README](../../README.md) | 
-[Next: WIP →](wip.md)
+[Back to README](../../README.md)     
+[Next: Sprint-02 Terraform Refactor →](sprint-02-terraform-refactor.md)
 # Sprint 1 — Networking Foundation
 
 ## Overview
@@ -75,3 +75,10 @@ This sprint established the foundational networking layer for the project.
 The resulting VPC environment provides a structured base for future infrastructure development.
 
 Additional networking capabilities and Terraform improvements will be introduced in the following sprints.
+
+[⬆ Back to top](#sprint-1--networking-foundation)
+
+---
+[Back to README](../../README.md) 
+
+[Next: Sprint-02 Terraform Refactor →](sprint-02-terraform-refactor.md)

@@ -15,7 +15,7 @@ The infrastructure is built incrementally using development sprints, starting fr
 - [Project Structure](#project-structure)
 - [Terraform Deployment](#terraform-deployment)
 - [Outputs](#outputs)
-- [Development Roadmap](#development-roadmap)
+- [Development Evolution Roadmap](#development-evolution-roadmap)
 - [Future Improvements](#future-improvements)
 - [Key Takeaways](#key-takeaways)
 
@@ -29,9 +29,9 @@ The purpose of the project is to demonstrate:
 
 - Infrastructure as Code using Terraform
 - AWS networking fundamentals
-- high-availability networking design
-- secure network segmentation
-- structured Terraform project organization
+- High-availability etworking design
+- Secure network segmentation
+- Structured Terraform project organization
 
 The infrastructure is implemented incrementally through development sprints to simulate a realistic infrastructure evolution process.
 
@@ -39,11 +39,8 @@ The infrastructure is implemented incrementally through development sprints to s
 
 
 The infrastructure deployed in the first stage of the project provides a foundational AWS networking layout.
-
 The VPC spans two Availability Zones and contains both public and private subnets.
-
 Public subnets provide internet-facing resources, while private subnets are designed to host internal services that are not directly accessible from the internet.
-
 The use of two Availability Zones provides a basic high-availability foundation for future workloads.
 
 A visual architecture diagram is included below:
@@ -51,22 +48,6 @@ A visual architecture diagram is included below:
 
 ![VPC Architecture](diagrams/vpc-architecture.png) 
 
- <!--  ## Project Structure
-```text
-terraform-vpc-project
-│
-├── README.md                      # Project overview and documentation entry point
-│
-├── provider.tf                    # Terraform and AWS provider configuration
-├── main.tf                        # Core infrastructure resources
-├── variables.tf                   # Input variables
-├── terraform.tfvars               # Variable values
-├── outputs.tf                     # Terraform outputs
-│
-└── diagrams                       # Architecture diagrams
-    └── vpc-architecture.png
-```
--->
 ## Networking Design
 
 The networking architecture includes the following components:
@@ -74,7 +55,7 @@ The networking architecture includes the following components:
 ### VPC
 
 A dedicated Virtual Private Cloud with CIDR block:
-```code
+```text
 10.0.0.0/16
 ```
 ### Subnets
@@ -92,7 +73,7 @@ Four subnets distributed across two Availability Zones:
 Two route tables control network traffic.
 
 Public Route Table
-```code
+```text
 0.0.0.0/0 → Internet Gateway
 ```
 Private Route Table
@@ -110,7 +91,6 @@ Two security groups are used to model a simple multi-tier architecture.
 Allows inbound traffic from the internet:
 
 - HTTP (80)
-
 - HTTPS (443)
 
 Outbound traffic is unrestricted.
@@ -122,51 +102,62 @@ Allows inbound traffic only from the public web security group:
 - TCP 8080
 
 This design ensures that backend services cannot be accessed directly from the internet.
-# Project Structure
+## Project Structure
 
 ```text
 terraform-vpc-project
 │
-├── README.md
+├── bootstrap
+│   ├── main.tf
+│   ├── provider.tf
+│   └── variables.tf
 │
-├── provider.tf
-├── main.tf
-├── variables.tf
-├── terraform.tfvars
-├── outputs.tf
+├── modules
+│   ├── vpc
+│   ├── subnets
+│   ├── routing
+│   └── security
 │
 ├── diagrams
 │   └── vpc-architecture.png
 │
-└── docs
-    └── sprints
-        ├── sprint-01-network-foundation.md
-        ├── sprint-02-terraform-refactor.md
-        ├── sprint-03-observability-endpoints.md
-        └── sprint-04-nat-gateway.md
+├── docs
+│   └── sprints
+│       ├── sprint-01-network-foundation.md
+│       ├── sprint-02-terraform-refactor.md
+│       └── sprint-03-advanced-networking.md
+│
+├── backend.tf
+├── provider.tf
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── data.tf
+├── terraform.tfvars
+└── README.md
 ```
 ## Terraform Deployment
 
 The infrastructure can be deployed using Terraform.
 
 Initialize Terraform
-```bash
+```hcl
 terraform init
 ```
 Validate configuration
-```bash
+```hcl
 terraform validate
 ```
 Review the execution plan
-```bash
+```hcl
 terraform plan
 ```
 Deploy infrastructure
-```bash
+```hcl
 terraform apply
 ```
 Destroy infrastructure
-```bash
+```hcl
 terraform destroy
 ```
 ## Outputs
@@ -180,7 +171,7 @@ After deployment Terraform exposes the following outputs:
 
 These outputs make it easier to reference the created resources in future infrastructure modules.
 
-## Development Roadmap
+## Development Evolution Roadmap
 
 The infrastructure is developed incrementally using development sprints.
 
@@ -188,10 +179,11 @@ Each sprint introduces new networking or Terraform improvements while maintainin
 
 Detailed documentation for each stage is available below:
 
-- [Sprint 1 — Networking Foundation](docs/sprints/sprint-01-network-foundation.md)
-- [Sprint 2 — Terraform Structure Improvements](docs/sprints/sprint-02-terraform-refactor.md)
-- [Sprint 3 — Observability and Endpoints](docs/sprints/sprint-03-flow-logs-endpoints.md)
-- [Sprint 4 — NAT Gateway and Internet Egress](docs/sprints/sprint-04-nat-gateway.md)
+| Sprint | Focus | Key Features |
+|------|------|------|
+|[Sprint 1](docs/sprints/sprint-01-network-foundation.md)|Networking Foundation | VPC, subnets, IGW, route tables|
+|[Sprint 2](docs/sprints/sprint-02-terraform-refactor.md)| Terraform Refactor | modules, S3 remote state, DynamoDB locking |
+[Sprint 3](docs/sprints/sprint-03-advanced-networking.md)| Advanced Networking| NAT Gateway, VPC Flow Logs, S3 endpoints |
 
 Each sprint is documented in the `docs/sprints` directory.
 
@@ -200,28 +192,20 @@ Each sprint is documented in the `docs/sprints` directory.
 
 Possible future extensions include:
 
-- Application Load Balancer
-
-- Auto Scaling Groups
-
-- ECS workloads
-
-- CI/CD pipeline integration
-
-- multi-environment Terraform deployments
+- Application Load Balancer with multi-AZ routing
+- Auto Scaling Groups for compute workloads
+- ECS or containerized workloads
+- CI/CD pipeline for Terraform deployments
+- multi-environment Terraform deployments (dev/stage/prod)
 
 ## Key Takeaways
 
 This project demonstrates several important cloud engineering concepts:
 
 - designing AWS networking architectures
-
 - implementing Infrastructure as Code using Terraform
-
 - building segmented network environments
-
 - managing infrastructure state and dependencies
-
 - structuring Terraform projects for maintainability
 
 The project also highlights the importance of building infrastructure incrementally and validating each stage before introducing additional complexity.
