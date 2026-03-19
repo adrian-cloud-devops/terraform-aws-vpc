@@ -1,226 +1,242 @@
 [← Previous: Sprint-01 Network Foundation](sprint-01-network-foundation.md)  
-[Back to README](../../README.md)   
+[Back to README](../../README.md)  
 [Next: Sprint-03 Advanced Networking →](sprint-03-advanced-networking.md)  
-# Sprint 02 – Terraform Refactor and Remote State
+
+# Sprint 02 — Terraform Refactor and Remote State
+
 ## Overview
 
-The goal of Sprint 02 was to improve the infrastructure code quality and introduce production-grade Terraform practices.
+The goal of Sprint 02 was to improve infrastructure code quality and introduce
+production-grade Terraform practices.
 
-During this sprint the Terraform configuration was refactored into reusable modules, existing infrastructure state was migrated safely, and a remote backend with state locking was implemented.
+During this sprint the flat Terraform configuration was refactored into reusable
+modules, Terraform state was migrated safely to a remote backend, and state locking
+was implemented to prevent concurrent changes.
 
-This ensures that infrastructure changes are safer, more maintainable, and closer to real-world DevOps workflows.
+
 
 ## Objectives
 
-The main objectives of this sprint were:
+- Refactor flat Terraform configuration into reusable modules
+- Introduce consistent resource tagging using `common_tags`
+- Safely migrate Terraform state after refactor using `terraform state mv`
+- Implement remote state storage in S3
+- Enable state locking with DynamoDB
 
-- Refactor Terraform configuration into modules
-- Introduce shared resource tagging
-- Safely migrate Terraform state after refactor
-- Implement remote state storage
-- Enable state locking to prevent concurrent changes
 
-## Terraform Module Refactor
 
-Initially the project contained a single Terraform configuration with all resources defined in one file.
+## Infrastructure Components
 
-To improve maintainability and scalability the configuration was reorganized into reusable modules.
+| Resource | Description |
+|---|---|
+| `modules/vpc` | Isolated core VPC resource |
+| `modules/subnets` | Public and private subnet definitions |
+| `modules/routing` | IGW, route tables, route associations |
+| `modules/security` | Security Groups for all network layers |
+| S3 bucket | Remote Terraform state storage |
+| DynamoDB table | State locking mechanism |
 
-Module Structure
+
+
+## Module Structure
+
+The flat configuration was reorganized into four modules:
 ```text
 modules/
 │
-├── vpc
-├── subnets
-├── routing
-└── security
+├── vpc/          # Core VPC resource
+├── subnets/      # Public and private subnet definitions
+├── routing/      # IGW, route tables, route associations
+└── security/     # Security Groups for all layers
 ```
-Each module is responsible for a specific infrastructure component.
 
-## Responsibilities of each module
+Each module is responsible for a single infrastructure concern and exposes
+its resources through output variables consumed by the root module.
 
-### vpc
-Creates the main VPC and enables DNS features.
 
-Resources:
-- aws_vpc
-### subnets
-Defines network segmentation across availability zones.
 
-Resources:
-- public subnets
-- private subnets
-### routing
-Handles internet connectivity and routing logic.
+## Module Responsibilities
 
-Resources:
-- Internet Gateway
-- Route tables
-- Route table associations
-### security
-Defines network security boundaries.
+### `vpc`
 
-Resources:
-- Security groups for public web layer
-- Security groups for private application layer
+Creates the main VPC with DNS support enabled.
+
+Resources: `aws_vpc`
+
+---
+
+### `subnets`
+
+Defines public and private subnet segmentation across two Availability Zones.
+Public subnets have `map_public_ip_on_launch = true`. Private subnets do not.
+
+Resources: `aws_subnet` 
+
+---
+
+### `routing`
+
+Handles internet connectivity and routing logic for both public and private subnets.
+
+Resources: `aws_internet_gateway`, `aws_route_table` , `aws_route_table_association` 
+
+ `aws_nat_gateway` and `aws_eip` also live in this module but are introduced
+ in Sprint 03. At this stage the private route table has no outbound internet route.
+
+---
+
+### `security`
+
+Defines Security Groups for all network layers. Internal communication uses
+Security Group referencing — no open CIDR rules between internal components.
+
+Resources: `aws_security_group` × 4
+
+
 
 ## Shared Resource Tagging
 
-A common tagging strategy was introduced to improve resource management and observability.
+A `common_tags` variable was introduced to enforce consistent tagging across
+all AWS resources. Tags are applied using `merge()` so each resource inherits
+the shared set while adding its own `Name` tag.
 
-Example tag set:
+| Tag | Value |
+|---|---|
+| `Environment` | `dev` |
+| `Project` | `terraform-aws-vpc-project` |
+| `ManagedBy` | `Terraform` |
 
-- `Environment = dev`
-- `Project     = terraform-aws-vpc-project`
-- `ManagedBy   = Terraform`
 
-These tags are applied across infrastructure using a shared variable:
-
-- `common_tags`
-
-This ensures consistent tagging across all AWS resources.
 
 ## Terraform State Migration
 
-After introducing modules, Terraform resource addresses changed.
+After introducing modules, Terraform resource addresses changed. For example:
+```
+Before:  aws_vpc.main_vpc
+After:   module.vpc.aws_vpc.main_vpc
+```
 
-For example:
+Without migration, Terraform would treat the old address as deleted and the new
+one as a new resource — destroying and recreating existing infrastructure.
 
-Before refactor:
-```hcl
-aws_vpc.main_vpc
-```
-After refactor:
-```hcl
-module.vpc.aws_vpc.main_vpc
-```
-To avoid destroying existing infrastructure the Terraform state was migrated using:
-```hcl
-terraform state mv
-```
-Example:
-```hcl
-terraform state mv aws_vpc.main_vpc module.vpc.aws_vpc.main_vpc
-```
-This allowed the refactor to be completed without recreating resources.
+`terraform state mv` was used to remap addresses in the state file without
+touching any actual AWS resources. This allowed the full refactor to be completed
+with zero downtime and no resource recreation.
+
+
 
 ## Remote Terraform State
 
-Local Terraform state was replaced with a remote backend.
-Remote state improves collaboration, reliability, and disaster recovery.
-The state is now stored in an S3 bucket.
+Local state was replaced with a remote S3 backend.
 
-Example backend configuration:
+| Setting | Value |
+|---|---|
+| Storage | S3 bucket |
+| Encryption | Enabled |
+| State locking | DynamoDB table |
+| Region | `eu-central-1` |
 
-```hcl
-terraform {
-  backend "s3" {
-    bucket         = "your-terraform-state-bucket"
-    key            = "vpc-project/terraform.tfstate"
-    region         = "eu-central-1"
-    dynamodb_table = "terraform-state-locks"
-    encrypt        = true
-  }
-}
-```
+Benefits over local state:
+
+- State file is not stored in the repository
+- Enables safe collaboration in team workflows
+- Protected against concurrent modifications via DynamoDB locking
+
+
 
 ## State Locking with DynamoDB
 
-To prevent concurrent infrastructure changes Terraform state locking was implemented using DynamoDB.
-
-Locking mechanism:
-```text
-Terraform operation starts
+DynamoDB prevents concurrent Terraform operations from modifying infrastructure
+at the same time.
+```
+terraform apply starts
         │
         ▼
-DynamoDB creates temporary lock
+DynamoDB creates lock entry
         │
         ▼
 Terraform executes changes
         │
         ▼
-Lock removed after completion
+Lock is released on completion
 ```
-This ensures that only one Terraform operation can modify infrastructure at a time.
+
+If a second operation is attempted while a lock is held, Terraform refuses to
+proceed and displays the lock ID — preventing conflicting changes.
+
 
 ## Backend Bootstrap
 
-Terraform cannot create the backend it uses.
-To solve this a small bootstrap configuration was created.
+Terraform cannot create the S3 bucket and DynamoDB table it uses as a backend.
+A separate `bootstrap/` configuration was created to provision these resources
+as a one-time setup step applied before the main infrastructure is initialized.
 
-Directory: `bootstrap/`
+The bootstrap configuration creates:
 
-This configuration creates:
-
-- S3 bucket for Terraform state
+- S3 bucket for Terraform state storage
 - DynamoDB table for state locking
 
-The bootstrap configuration is applied once during project setup.
+
 
 ## Project Structure After Refactor
 ```text
 terraform-aws-vpc-project
 │
-├── bootstrap
+├── bootstrap/
 │
-├── modules
-│   ├── vpc
-│   ├── subnets
-│   ├── routing
-│   └── security
-│
-├── diagrams
-├── docs
+├── modules/
+│   ├── vpc/
+│   ├── subnets/
+│   ├── routing/
+│   └── security/
 │
 ├── backend.tf
+├── data.tf
 ├── main.tf
 ├── provider.tf
 ├── variables.tf
 ├── outputs.tf
-├── data.tf
-│
 └── terraform.tfvars
 ```
-## Key Improvements Achieved
 
-This sprint significantly improved the infrastructure codebase.
 
-Improvements include:
 
-- Modular Terraform architecture
-- Safe state migration
-- Remote state storage
-- DynamoDB state locking
-- Consistent resource tagging
-- Improved project structure
+## Validation
 
-These practices align with real-world Infrastructure as Code workflows used in production environments.
+The refactor was validated by:
+
+- Confirming `terraform plan` showed no resource changes after state migration
+- Verifying all resources retained their existing AWS resource IDs
+- Confirming state file is stored in S3 and no longer exists locally
+- Testing DynamoDB locking by observing lock entry creation during `terraform apply`
+
+
+
+## Key Takeaways
+
+- Modular Terraform design separates concerns and makes the codebase easier
+  to extend — each sprint adds new modules without touching existing ones
+- `terraform state mv` is essential when refactoring — skipping it causes
+  Terraform to destroy and recreate existing resources
+- The `bootstrap/` pattern solves the chicken-and-egg problem of Terraform
+  needing infrastructure to store its own state
+- Remote state with S3 and DynamoDB locking is the standard approach for any
+  team or production environment
+
+
 
 ## Next Steps
 
-Sprint 03 will focus on improving the networking architecture by introducing production-grade networking components such as:
+Sprint 03 extends the networking layer with:
 
 - NAT Gateway for outbound internet access from private subnets
-- Elastic IP required by the NAT Gateway
-- VPC Flow Logs
-- CloudWatch Log Group for Flow Logs delivery
-
-## Summary
-
-Sprint 02 transformed the Terraform configuration from a basic infrastructure setup into a more robust and production-ready Infrastructure as Code project.
-
-Key DevOps practices introduced in this sprint include:
-
-- modular Terraform design
-- remote backend usage
-- safe state migration
-- infrastructure locking mechanisms
-
-These improvements significantly increase the reliability and maintainability of the infrastructure.
+- Elastic IP for the NAT Gateway
+- S3 Gateway Endpoint to route AWS traffic internally
+- VPC Flow Logs with CloudWatch delivery
 
 [⬆ Back to top](#sprint-02--terraform-refactor-and-remote-state)
 
 ---
 [← Previous: Sprint-01 Network Foundation](sprint-01-network-foundation.md)  
-[Back to README](../../README.md)   
+[Back to README](../../README.md)  
 [Next: Sprint-03 Advanced Networking →](sprint-03-advanced-networking.md)  

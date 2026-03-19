@@ -1,214 +1,187 @@
 # AWS VPC Infrastructure with Terraform
 
-This project demonstrates how to design and deploy a basic AWS networking architecture using Terraform.
+![Terraform](https://img.shields.io/badge/Terraform-1.5+-purple?logo=terraform)
+![AWS](https://img.shields.io/badge/AWS-VPC-orange?logo=amazon-aws)
 
-The goal of the project is to build a production-like VPC environment using Infrastructure as Code and to demonstrate understanding of AWS networking fundamentals.
-
-The infrastructure is built incrementally using development sprints, starting from a minimal networking setup and gradually introducing more advanced networking and Terraform best practices.
+A production-like AWS VPC environment built with Terraform, demonstrating Infrastructure as Code best practices and AWS networking fundamentals.
 
 ## Table of Contents
 
 - [Project Overview](#project-overview)
 - [Architecture](#architecture)
-- [Networking Design](#networking-design)
-- [Security Model](#security-model)
+- [Prerequisites](#prerequisites)
 - [Project Structure](#project-structure)
 - [Terraform Deployment](#terraform-deployment)
 - [Outputs](#outputs)
-- [Development Evolution Roadmap](#development-evolution-roadmap)
+- [Technical Documentation](#technical-documentation)
 - [Future Improvements](#future-improvements)
 - [Key Takeaways](#key-takeaways)
 
+
+
 ## Project Overview
 
-This project provisions an AWS Virtual Private Cloud (VPC) environment using Terraform.
+This project provisions a multi-AZ AWS VPC environment using Terraform.
 
-The architecture is designed to simulate a simplified production networking setup, including both public and private network segments distributed across multiple Availability Zones.
+The infrastructure is built incrementally through four development sprints, simulating how real infrastructure evolves in a team environment — starting from a minimal networking setup and gradually introducing production-grade practices.
 
-The purpose of the project is to demonstrate:
+**What this project covers:**
 
-- Infrastructure as Code using Terraform
-- AWS networking fundamentals
-- High-availability etworking design
-- Secure network segmentation
-- Structured Terraform project organization
+- Multi-AZ VPC with public and private subnet segmentation
+- Bastion-based SSH access to private resources
+- NAT Gateway for controlled outbound internet access from private subnets
+- S3 Gateway Endpoint to keep AWS traffic off the public internet
+- Modular Terraform architecture with remote state and locking
+- VPC Flow Logs with CloudWatch integration
+- EC2 compute layer for end-to-end connectivity validation
 
-The infrastructure is implemented incrementally through development sprints to simulate a realistic infrastructure evolution process.
+
 
 ## Architecture
 
+The infrastructure spans two Availability Zones and separates public and private workloads.
 
-The infrastructure deployed in the first stage of the project provides a foundational AWS networking layout.
-The VPC spans two Availability Zones and contains both public and private subnets.
-Public subnets provide internet-facing resources, while private subnets are designed to host internal services that are not directly accessible from the internet.
-The use of two Availability Zones provides a basic high-availability foundation for future workloads.
+![VPC Architecture](diagrams/vpc-architecture.png)
 
-A visual architecture diagram is included below:
+**Traffic flow summary:**
+
+| Flow | Path |
+|---|---|
+| Inbound admin access | Internet → IGW → Bastion Host (public subnet) |
+| Internal access | Bastion → Private EC2 (via Security Group referencing) |
+| Outbound from private | Private EC2 → NAT Gateway → Internet |
+| AWS internal traffic | Private EC2 → S3 Gateway Endpoint → S3 |
+
+> Full networking design, security model, CIDR layout, and per-sprint implementation
+> details are documented in the [Technical Documentation](#technical-documentation) below.
 
 
-![VPC Architecture](diagrams/vpc-architecture.png) 
 
-## Networking Design
+## Prerequisites
 
-The networking architecture includes the following components:
+Before deploying this infrastructure, ensure you have the following installed and configured:
 
-### VPC
+- [Terraform](https://developer.hashicorp.com/terraform/install) `>= 1.5.0`
+- AWS CLI configured with appropriate credentials
+- An AWS account with permissions to create VPC, EC2, IAM, and CloudWatch resources
+- An S3 bucket and DynamoDB table for remote state (created via `bootstrap/`)
 
-A dedicated Virtual Private Cloud with CIDR block:
-```text
-10.0.0.0/16
-```
-### Subnets
 
-Four subnets distributed across two Availability Zones:
 
-| Subnet | CIDR | Type |
-|------|------|------|
-| public-subnet-a | 10.0.1.0/24 | Public |
-| public-subnet-b | 10.0.2.0/24 | Public |
-| private-subnet-a | 10.0.11.0/24 | Private |
-| private-subnet-b | 10.0.12.0/24 | Private |
-### Routing
-
-Two route tables control network traffic.
-
-Public Route Table
-```text
-0.0.0.0/0 → Internet Gateway
-```
-Private Route Table
-
-Private subnets currently have no direct internet route.
-
-Internet egress will be introduced later using a NAT Gateway.
-
-## Security Model
-
-Two security groups are used to model a simple multi-tier architecture.
-
-### Public Web Security Group
-
-Allows inbound traffic from the internet:
-
-- HTTP (80)
-- HTTPS (443)
-
-Outbound traffic is unrestricted.
-
-### Private Application Security Group
-
-Allows inbound traffic only from the public web security group:
-
-- TCP 8080
-
-This design ensures that backend services cannot be accessed directly from the internet.
 ## Project Structure
-
 ```text
-terraform-vpc-project
+terraform-aws-vpc-project
 │
-├── bootstrap
-│   ├── main.tf
-│   ├── provider.tf
-│   └── variables.tf
+├── bootstrap/              # Minimal bootstrap configuration for backend resources
+├── diagrams/               # Architecture diagrams used in the documentation
+├── docs/                   # Sprint-based project documentation
+├── modules/                # Reusable Terraform modules for infrastructure components
+│   ├── compute/            # EC2 resources for bastion and private instance validation
+│   ├── endpoints/          # VPC endpoints configuration (for example S3 Gateway Endpoint)
+│   ├── observability/      # Flow Logs, CloudWatch Logs, and related IAM resources
+│   ├── routing/            # Route tables, route associations, Internet/NAT routing
+│   ├── security/           # Security Groups for web, app, bastion, and private access
+│   ├── subnets/            # Public and private subnet definitions across Availability Zones
+│   └── vpc/                # Core VPC resource and base network configuration
 │
-├── modules
-│   ├── vpc
-│   ├── subnets
-│   ├── routing
-│   └── security
-│
-├── diagrams
-│   └── vpc-architecture.png
-│
-├── docs
-│   └── sprints
-│       ├── sprint-01-network-foundation.md
-│       ├── sprint-02-terraform-refactor.md
-│       └── sprint-03-advanced-networking.md
-│
-├── backend.tf
-├── provider.tf
-├── main.tf
-├── variables.tf
-├── outputs.tf
-├── data.tf
-├── terraform.tfvars
-└── README.md
+├── .gitignore              # Files and directories excluded from version control
+├── .terraform.lock.hcl     # Provider dependency lock file
+├── backend.tf              # Remote backend configuration for Terraform state
+├── data.tf                 # Data sources used by the configuration
+├── main.tf                 # Root module orchestration and module composition
+├── outputs.tf              # Exported values from the infrastructure
+├── provider.tf             # Terraform provider configuration
+├── README.md               # Main project documentation
+├── terraform.tfvars        # Input variable values for the environment
+└── variables.tf            # Input variable definitions for the root module
 ```
+
+
+
 ## Terraform Deployment
 
-The infrastructure can be deployed using Terraform.
-
-Initialize Terraform
-```hcl
+### 1. Bootstrap remote state (first time only)
+```bash
+cd bootstrap
 terraform init
-```
-Validate configuration
-```hcl
-terraform validate
-```
-Review the execution plan
-```hcl
-terraform plan
-```
-Deploy infrastructure
-```hcl
 terraform apply
 ```
-Destroy infrastructure
-```hcl
+
+### 2. Configure variables
+```bash
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars with your values
+```
+
+### 3. Deploy infrastructure
+```bash
+terraform init
+terraform validate
+terraform plan
+terraform apply
+```
+
+### 4. Destroy infrastructure
+```bash
 terraform destroy
 ```
+
+
 ## Outputs
 
-After deployment Terraform exposes the following outputs:
-- `vpc_id`
-- `public_subnet_a_id`
-- `public_subnet_b_id`
-- `private_subnet_a_id`
-- `private_subnet_b_id`
+After deployment, Terraform exposes the following values:
 
-These outputs make it easier to reference the created resources in future infrastructure modules.
+| Output | Description |
+|---|---|
+| `vpc_id` | ID of the created VPC |
+| `public_subnet_a_id` | ID of public subnet in AZ-a |
+| `public_subnet_b_id` | ID of public subnet in AZ-b |
+| `private_subnet_a_id` | ID of private subnet in AZ-a |
+| `private_subnet_b_id` | ID of private subnet in AZ-b |
 
-## Development Evolution Roadmap
 
-The infrastructure is developed incrementally using development sprints.
 
-Each sprint introduces new networking or Terraform improvements while maintaining a working infrastructure baseline.
+## Technical Documentation
 
-Detailed documentation for each stage is available below:
+The full technical documentation is split across four sprint docs — each covering
+the design decisions and architecture changes introduced at that stage.
+If you want to understand how and why the infrastructure was built, start there.
 
-| Sprint | Focus | Key Features |
-|------|------|------|
-|[Sprint 1](docs/sprints/sprint-01-network-foundation.md)|Networking Foundation | VPC, subnets, IGW, route tables|
-|[Sprint 2](docs/sprints/sprint-02-terraform-refactor.md)| Terraform Refactor | modules, S3 remote state, DynamoDB locking |
-[Sprint 3](docs/sprints/sprint-03-advanced-networking.md)| Advanced Networking| NAT Gateway, VPC Flow Logs, S3 endpoints |
+| Sprint | Focus | Key additions |
+|---|---|---|
+| [Sprint 01](docs/sprints/sprint-01-network-foundation.md) | Networking Foundation | VPC, subnets, IGW, route tables, Security Groups |
+| [Sprint 02](docs/sprints/sprint-02-terraform-refactor.md) | Terraform Refactor | Modules, S3 remote state, DynamoDB locking |
+| [Sprint 03](docs/sprints/sprint-03-advanced-networking.md) | Advanced Networking | NAT Gateway, VPC Flow Logs, S3 Endpoint |
+| [Sprint 04](docs/sprints/sprint-04-compute-layer-validation.md) | Compute & Validation | Bastion host, private EC2, connectivity tests |
 
-Each sprint is documented in the `docs/sprints` directory.
 
 
 ## Future Improvements
 
-Possible future extensions include:
-
 - Application Load Balancer with multi-AZ routing
 - Auto Scaling Groups for compute workloads
 - ECS or containerized workloads
-- CI/CD pipeline for Terraform deployments
-- multi-environment Terraform deployments (dev/stage/prod)
+- CI/CD pipeline for Terraform deployments (`terraform fmt`, `validate`, `plan` on PR)
+- Multi-environment support (dev / staging / prod)
+
+
 
 ## Key Takeaways
 
-This project demonstrates several important cloud engineering concepts:
+This project demonstrates not only how to provision AWS infrastructure, but how
+to design and evolve it with a production mindset.
 
-- designing AWS networking architectures
-- implementing Infrastructure as Code using Terraform
-- building segmented network environments
-- managing infrastructure state and dependencies
-- structuring Terraform projects for maintainability
-
-The project also highlights the importance of building infrastructure incrementally and validating each stage before introducing additional complexity.
+- Multi-layer AWS networking with clear public/private separation
+- Security Group referencing instead of open CIDR rules for internal communication
+- Modular Terraform design with remote state and locking
+- Safe state migration after structural refactoring (`terraform state mv`)
+- Controlled outbound connectivity using NAT Gateway
+- Internal AWS traffic optimization using VPC Gateway Endpoints
+- End-to-end connectivity validation through real SSH and network flow scenarios
+- Network observability using VPC Flow Logs and CloudWatch
+- Incremental infrastructure development — each sprint leaves the system in a
+  testable state
 
 ---
+
 [⬆ Back to top](#aws-vpc-infrastructure-with-terraform)

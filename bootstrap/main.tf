@@ -2,10 +2,10 @@ resource "aws_s3_bucket" "terraform_state" {
   bucket = var.state_bucket_name
 
   tags = {
-    Name       = "terraform-state-bucket"
-    Project    = "terraform-aws-vpc-project"
-    ManagedBy  = "Terraform"
-    Purpose    = "Remote Terraform State"
+    Name      = "terraform-state-bucket"
+    Project   = "terraform-aws-vpc-project"
+    ManagedBy = "Terraform"
+    Purpose   = "Remote Terraform State"
   }
 }
 
@@ -47,9 +47,9 @@ resource "aws_dynamodb_table" "terraform_locks" {
   }
 
   tags = {
-    Name       = "terraform-state-lock-table"
-    Project    = "terraform-aws-vpc-project"
-    ManagedBy  = "Terraform"
-    Purpose    = "Terraform State Locking"
+    Name      = "terraform-state-lock-table"
+    Project   = "terraform-aws-vpc-project"
+    ManagedBy = "Terraform"
+    Purpose   = "Terraform State Locking"
   }
 }

@@ -32,3 +32,7 @@ variable "common_tags" {
   description = "Common tags applied to all resources"
   type        = map(string)
 }
+variable "key_pair_name" {
+  description = "Existing AWS key pair name for EC2 access"
+  type        = string
+}

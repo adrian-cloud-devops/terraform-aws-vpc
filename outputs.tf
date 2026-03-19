@@ -22,3 +22,12 @@ output "private_subnet_b_id" {
   description = "ID of private subnet B"
   value       = module.subnets.private_subnet_b_id
 }
+output "bastion_public_ip" {
+  description = "Public IP of bastion host"
+  value       = module.compute.bastion_public_ip
+}
+
+output "private_instance_private_ip" {
+  description = "Private IP of private test host"
+  value       = module.compute.private_instance_private_ip
+}
